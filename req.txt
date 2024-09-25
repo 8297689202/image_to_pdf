@@ -1,0 +1,6 @@
+streamlit
+pillow_heif
+pikepdf
+pillow 
+reportlab
+svglib
