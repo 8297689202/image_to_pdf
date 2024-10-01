@@ -233,4 +233,3 @@ if st.session_state.processing_complete:
                                file_name=f"{file_name}.jpg",
                                mime="image/jpeg",
                                key=f"compressed_img_{i}")
-#made some changes to the code to make it more user friendly and easier to use.
