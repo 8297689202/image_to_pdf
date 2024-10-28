@@ -7,20 +7,27 @@ import pillow_heif
 import pikepdf
 from io import BytesIO
 
-# Register HEIF opener for image handling
+# Register HEIF/HEIC opener for image handling
 pillow_heif.register_heif_opener()
 
-
-def convert_svg_to_pdf(svg_path):
+def convert_heic_to_pil(heic_file):
     """
-    Convert an SVG file to a PDF using svglib and reportlab.
+    Convert HEIC file to PIL Image object.
     """
-    drawing = svg2rlg(svg_path)
-    output_pdf = BytesIO()
-    renderPDF.drawToFile(drawing, output_pdf)
-    output_pdf.seek(0)
-    return output_pdf
-
+    try:
+        # Read the HEIC file
+        heif_file = pillow_heif.read_heif(heic_file)
+        # Convert to PIL Image
+        image = Image.frombytes(
+            heif_file.mode,
+            heif_file.size,
+            heif_file.data,
+            "raw",
+        )
+        return image
+    except Exception as e:
+        st.error(f"Error converting HEIC image: {str(e)}")
+        return None
 
 def compress_image(image_file, target_ratio=0.7, quality=50):
     """
@@ -28,25 +35,30 @@ def compress_image(image_file, target_ratio=0.7, quality=50):
     """
     output_image = BytesIO()
     try:
-        with Image.open(image_file) as img:
-            # Add a white background for PNG images
-            if img.mode in ['RGBA', 'P']:  # Check for transparency
-                # Create a new image with a white background
-                background = Image.new('RGB', img.size, (255, 255, 255))
-                background.paste(
-                    img, (0, 0),
-                    img.convert('RGBA') if img.mode == 'RGBA' else None)
-                img = background
+        # Check if the file is HEIC
+        if hasattr(image_file, 'name') and image_file.name.lower().endswith('.heic'):
+            img = convert_heic_to_pil(image_file)
+            if img is None:
+                return None
+        else:
+            img = Image.open(image_file)
 
-            img = img.resize((int(img.width * target_ratio),
-                              int(img.height * target_ratio)))
-            img.save(output_image, format='JPEG', quality=quality)
-            output_image.seek(0)
+        # Add a white background for images with transparency
+        if img.mode in ['RGBA', 'P']:
+            background = Image.new('RGB', img.size, (255, 255, 255))
+            background.paste(
+                img, (0, 0),
+                img.convert('RGBA') if img.mode == 'RGBA' else None)
+            img = background
+
+        img = img.resize((int(img.width * target_ratio),
+                          int(img.height * target_ratio)))
+        img.save(output_image, format='JPEG', quality=quality)
+        output_image.seek(0)
         return output_image
     except Exception as e:
         st.error(f"Error compressing image: {str(e)}")
-        return None  # Return None if there's an error
-
+        return None
 
 def create_single_pdf_from_images(images, file_names):
     """
@@ -56,9 +68,15 @@ def create_single_pdf_from_images(images, file_names):
     try:
         with pikepdf.Pdf.new() as pdf:
             for image, file_name in zip(images, file_names):
-                img = Image.open(image)
+                # Handle HEIC files
+                if hasattr(image, 'name') and image.name.lower().endswith('.heic'):
+                    img = convert_heic_to_pil(image)
+                    if img is None:
+                        continue
+                else:
+                    img = Image.open(image)
 
-                # Add a white background for PNG images
+                # Add a white background for images with transparency
                 if img.mode in ['RGBA', 'P']:
                     background = Image.new('RGB', img.size, (255, 255, 255))
                     background.paste(
@@ -82,15 +100,20 @@ def create_single_pdf_from_images(images, file_names):
         st.error(f"Error creating PDF: {str(e)}")
         return None
 
-
 def create_individual_pdfs_from_images(images, file_names):
     pdfs = []
     try:
         for image, file_name in zip(images, file_names):
             img_pdf = BytesIO()
-            img = Image.open(image)
+            # Handle HEIC files
+            if hasattr(image, 'name') and image.name.lower().endswith('.heic'):
+                img = convert_heic_to_pil(image)
+                if img is None:
+                    continue
+            else:
+                img = Image.open(image)
 
-            # Add a white background for PNG images
+            # Add a white background for images with transparency
             if img.mode in ['RGBA', 'P']:
                 background = Image.new('RGB', img.size, (255, 255, 255))
                 background.paste(
@@ -106,7 +129,6 @@ def create_individual_pdfs_from_images(images, file_names):
         st.error(f"Error creating individual PDFs: {str(e)}")
         return None
 
-
 # Streamlit UI setup
 st.title("Image to PDF Converter")
 st.subheader("Input")
@@ -114,7 +136,7 @@ st.subheader("Input")
 uploaded_files = st.file_uploader(
     "Choose Images",
     accept_multiple_files=True,
-    type=["png", "jpeg", "jpg", "heif", "bmp", "tiff", "jfif", "webp"])
+    type=["png", "jpeg", "jpg", "heif", "heic", "bmp", "tiff", "jfif", "webp"])
 
 if uploaded_files:
     unique_files = {}
